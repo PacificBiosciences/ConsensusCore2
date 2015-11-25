@@ -639,15 +639,19 @@ Recursor::Recursor(std::unique_ptr<AbstractTemplate>&& tpl, const MappedRead& mr
 {
 }
 
-size_t Recursor::FillAlphaBeta(M& a, M& b) const throw(AlphaBetaMismatch)
+size_t Recursor::FillAlphaBeta(M& a, M& b) throw(AlphaBetaMismatch)
 {
+    size_t alphaBetaMismatches = 0;
+
+tryFill:
     FillAlpha(M::Null(), a);
     FillBeta(a, b);
 
-    size_t I = read_.Length();
-    size_t J = tpl_->Length();
+    const size_t I = read_.Length();
+    const size_t J = tpl_->Length();
+    const int maxSize =
+        std::max(100, static_cast<int>(0.5 + REBANDING_THRESHOLD * (I + 1) * (J + 1)));
     int flipflops = 0;
-    int maxSize = std::max(100, static_cast<int>(0.5 + REBANDING_THRESHOLD * (I + 1) * (J + 1)));
 
     // if we use too much space, do at least one more round
     // to take advantage of rebanding
@@ -673,8 +677,13 @@ size_t Recursor::FillAlphaBeta(M& a, M& b) const throw(AlphaBetaMismatch)
         ++flipflops;
     }
 
-    if (std::abs(1.0 - alphaV / betaV) > ALPHA_BETA_MISMATCH_TOLERANCE)
-        throw AlphaBetaMismatch();
+    if (std::abs(1.0 - alphaV / betaV) > ALPHA_BETA_MISMATCH_TOLERANCE) {
+        // try at least one time to break out of this by increasing banding
+        if (alphaBetaMismatches >= 1) throw AlphaBetaMismatch();
+        scoreDiff_ *= 2;  // increases the logScoreDiff by ~0.69 units
+        ++alphaBetaMismatches;
+        goto tryFill;
+    }
 
     return flipflops;
 }
