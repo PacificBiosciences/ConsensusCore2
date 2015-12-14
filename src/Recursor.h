@@ -62,7 +62,7 @@ public:
     /// This routine will fill the alpha and beta matrices, ensuring
     /// that the score computed from the alpha and beta recursions are
     /// identical, refilling back-and-forth if necessary.
-    size_t FillAlphaBeta(M& alpha, M& beta) const throw(AlphaBetaMismatch);
+    size_t FillAlphaBeta(M& alpha, M& beta) throw(AlphaBetaMismatch);
 
     /**
      Fill in the alpha matrix.  This matrix has the read run along the rows, and
