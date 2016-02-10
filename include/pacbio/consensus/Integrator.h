@@ -51,7 +51,10 @@ class AbstractIntegrator
 {
 public:
     virtual ~AbstractIntegrator();
-
+    /* This method removes any evaluators that no longer
+     * span any portion of the template.
+     */
+    virtual void RemoveInvalidAlignments();
     virtual size_t Length() const = 0;
     virtual char operator[](size_t i) const = 0;
     virtual operator std::string() const = 0;

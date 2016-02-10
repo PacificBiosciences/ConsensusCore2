@@ -75,8 +75,14 @@ void Recursor::FillAlpha(const M& guide, M& alpha) const
     // But our matrix indexing is one off the model/outcome indexing
     // so the match in (1,1) corresponds to a pairing between
     // Model[0]/Outcome[0]
-    size_t I = read_.Length();
-    size_t J = tpl_->Length();
+    const size_t I = read_.Length();
+    const size_t J = tpl_->Length();
+    
+    // This case should have been effectively guarded against upstream, and a
+    // big problem has occurred if this ever happens.
+    if (J == 0) {
+        throw std::runtime_error("Tried to calculate likelihood for a read aligned to no template.");
+    }
 
     assert(alpha.Rows() == I + 1 && alpha.Columns() == J + 1);
     assert(guide.IsNull() || (guide.Rows() == alpha.Rows() && guide.Columns() == alpha.Columns()));
@@ -397,40 +403,21 @@ void Recursor::ExtendAlpha(const M& alpha, size_t beginColumn, M& ext, size_t nu
     // positions.
     size_t maxLeftMovePossible = tpl_->Length();
     size_t maxDownMovePossible = read_.Length();
+    
+    /* We are going to completely fill in the rectangle defined by the highest
+     * and lowest rows used in any column of the area we are filling. */
+     size_t beginRow, endRow;
+    // The first column should always start before the mutation
+    std::tie(beginRow, endRow) = alpha.UsedRowRange(beginColumn);
+    for (size_t newJ = beginColumn + 1; newJ < alpha.Columns() &&
+                                        (newJ - beginColumn - 1) < numExtColumns; newJ++) {
+        endRow = std::max(alpha.UsedRowRange(newJ).second, endRow);
+    }
+    
+    
 
     for (size_t extCol = 0; extCol < numExtColumns; extCol++) {
         size_t j = beginColumn + extCol;
-        size_t beginRow, endRow;
-
-        //
-        // If this extend is contained within the column bounds of
-        // the original alpha, we use the row range that was
-        // previously determined.  Otherwise start at alpha's last
-        // UsedRow beginRow and go to the end.
-        //
-        // BULLSHIT! If there was a deletion or insertion, the row range for the
-        // previous
-        // column, not the column of interest will be used.
-        // TODO: ERROR! Fix this. Temporary hack is to merge the columns in
-        // front and behind.
-        // Still totally broken.
-        if (j < tpl_->Length()) {
-            std::tie(beginRow, endRow) = alpha.UsedRowRange(j);
-            size_t pBegin, pEnd, nBegin, nEnd;
-            if (j > 0) {
-                std::tie(pBegin, pEnd) = alpha.UsedRowRange(j - 1);
-                beginRow = std::min(beginRow, pBegin);
-                endRow = std::max(endRow, pEnd);
-            }
-            if ((j + 1) < tpl_->Length()) {
-                std::tie(nBegin, nEnd) = alpha.UsedRowRange(j + 1);
-                beginRow = std::min(beginRow, nBegin);
-                endRow = std::max(endRow, nEnd);
-            }
-        } else {
-            beginRow = alpha.UsedRowRange(alpha.Columns() - 1).first;
-            endRow = alpha.Rows();
-        }
         ext.StartEditingColumn(extCol, beginRow, endRow);
 
         int i;
@@ -468,7 +455,7 @@ void Recursor::ExtendAlpha(const M& alpha, size_t beginColumn, M& ext, size_t nu
                                                         prevTplParams.Base, currTplParams.Base);
                 }
                 score = thisMoveScore;
-            }
+           }
 
             // Stick or Branch:
             if (i > 1 && i < maxDownMovePossible && j != maxLeftMovePossible) {

@@ -58,8 +58,15 @@ EvaluatorImpl::EvaluatorImpl(std::unique_ptr<AbstractTemplate>&& tpl, const Mapp
     , beta_(mr.Length() + 1, recursor_.tpl_->Length() + 1)
     , extendBuffer_(mr.Length() + 1, EXTEND_BUFFER_COLUMNS)
 {
+    ValidateAssumptions();
     recursor_.FillAlphaBeta(alpha_, beta_);
     if (!std::isfinite(LL())) throw AlphaBetaMismatch();
+}
+    
+void EvaluatorImpl::ValidateAssumptions() {
+    if (TemplateSpan() == 0) {
+        throw std::runtime_error("Cannot score a read that aligns to an empty template sequence");
+    }
 }
 
 double EvaluatorImpl::LL(const Mutation& mut_)
@@ -129,13 +136,19 @@ double EvaluatorImpl::LL(const Mutation& mut_)
         throw TooSmallTemplateException();
          */
 
-        //
-        // Just do the whole fill
-        //
-        ScaledMatrix alphaP(recursor_.read_.Length() + 1, recursor_.tpl_->Length() + 1);
-        recursor_.FillAlpha(ScaledMatrix::Null(), alphaP);
-        score = std::log(alphaP(recursor_.read_.Length(), recursor_.tpl_->Length())) +
+        /*
+         Just do the whole fill, but guard against the case where we have deleted 
+         away the final base in the template that this aligned to (leads to 
+         nasty SIGSEGV */
+        if (TemplateSpan() == 0) {
+            recursor_.tpl_->Reset();
+            return 0;
+        } else {
+            ScaledMatrix alphaP(recursor_.read_.Length() + 1, recursor_.tpl_->Length() + 1);
+            recursor_.FillAlpha(ScaledMatrix::Null(), alphaP);
+            score = std::log(alphaP(recursor_.read_.Length(), recursor_.tpl_->Length())) +
                 alphaP.GetLogProdScales();
+        }
     }
 
     // reset the virtual mutation
@@ -150,6 +163,10 @@ double EvaluatorImpl::LL() const
            recursor_.tpl_->UndoCounterWeights(recursor_.read_.Length());
 }
 
+size_t EvaluatorImpl::TemplateSpan() const {
+    return recursor_.tpl_->Length();
+}
+
 std::pair<double, double> EvaluatorImpl::NormalParameters() const
 {
     return recursor_.tpl_->NormalParameters();
@@ -162,8 +179,9 @@ double EvaluatorImpl::ZScore() const
     return (LL() - mean) / std::sqrt(var);
 }
 
-inline void EvaluatorImpl::Recalculate()
+void EvaluatorImpl::Recalculate()
 {
+    ValidateAssumptions();
     size_t I = recursor_.read_.Length() + 1;
     size_t J = recursor_.tpl_->Length() + 1;
     alpha_.Reset(I, J);
@@ -175,13 +193,11 @@ inline void EvaluatorImpl::Recalculate()
 void EvaluatorImpl::ApplyMutation(const Mutation& mut)
 {
     recursor_.tpl_->ApplyMutation(mut);
-    Recalculate();
 }
 
 void EvaluatorImpl::ApplyMutations(std::vector<Mutation>* muts)
 {
     recursor_.tpl_->ApplyMutations(muts);
-    Recalculate();
 }
 
 /*

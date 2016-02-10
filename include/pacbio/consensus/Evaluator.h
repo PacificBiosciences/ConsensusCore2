@@ -24,8 +24,10 @@ public:
     Evaluator(Evaluator&&);
 
     ~Evaluator();
-
-    size_t Length() const;
+    /* Returns the length of the alignment on the template.
+     * In certain circumstances this can go to 0 and the read should be 
+     * removed. */
+    size_t TemplateSpan() const;
     char operator[](size_t i) const;
     operator std::string() const;
 
@@ -38,6 +40,7 @@ public:
 
     void ApplyMutation(const Mutation& mut);
     void ApplyMutations(std::vector<Mutation>* muts);
+    void Recalculate();
 
 private:
     std::unique_ptr<EvaluatorImpl> impl_;

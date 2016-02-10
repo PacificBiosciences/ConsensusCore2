@@ -55,6 +55,14 @@ AddReadResult AbstractIntegrator::AddRead(std::unique_ptr<AbstractTemplate>&& tp
     return result;
 }
 
+void AbstractIntegrator::RemoveInvalidAlignments() {
+    for (auto& eval : evals_) {
+        if (eval && eval->TemplateSpan() == 0) {
+            eval.reset(nullptr);
+        }
+    }    
+}
+    
 double AbstractIntegrator::LL(const Mutation& fwdMut)
 {
     const Mutation revMut(ReverseComplement(fwdMut));
@@ -195,6 +203,15 @@ void MonoMolecularIntegrator::ApplyMutation(const Mutation& fwdMut)
                 eval->ApplyMutation(revMut);
         }
     }
+    
+    // Now clean out anything that no longer aligns to the template
+    RemoveInvalidAlignments();
+    // And recalculate the likelihoods
+    for (auto& eval : evals_) {
+       if (eval) {
+               eval->Recalculate();
+            }
+    }   
 
     assert(fwdTpl_.Length() == revTpl_.Length());
 
@@ -218,16 +235,25 @@ void MonoMolecularIntegrator::ApplyMutations(std::vector<Mutation>* fwdMuts)
 
     for (auto it = fwdMuts->crbegin(); it != fwdMuts->crend(); ++it)
         revMuts.emplace_back(ReverseComplement(*it));
-
+    
+    // Mutate the actual template
     fwdTpl_.ApplyMutations(fwdMuts);
     revTpl_.ApplyMutations(&revMuts);
-
+    // Now update the coordinates
     for (auto& eval : evals_) {
         if (eval) {
             if (eval.Strand == StrandEnum::FORWARD)
                 eval->ApplyMutations(fwdMuts);
             else
                 eval->ApplyMutations(&revMuts);
+        }
+    }
+    // Now clean out anything that no longer aligns to the template
+    RemoveInvalidAlignments();
+    // And recalculate the likelihoods
+    for (auto& eval : evals_) {
+        if (eval) {
+            eval->Recalculate();
         }
     }
 
@@ -300,6 +326,15 @@ void MultiMolecularIntegrator::ApplyMutation(const Mutation& fwdMut)
                 eval->ApplyMutation(revMut);
         }
     }
+    
+    // Now clean out anything that no longer aligns to the template
+    RemoveInvalidAlignments();
+    // And recalculate the likelihoods
+    for (auto& eval : evals_) {
+        if (eval) {
+            eval->Recalculate();
+        }
+    }
 
     assert(fwdTpl_.length() == revTpl_.length());
     assert(fwdTpl_ == ::PacBio::Consensus::ReverseComplement(revTpl_));
@@ -321,6 +356,15 @@ void MultiMolecularIntegrator::ApplyMutations(std::vector<Mutation>* fwdMuts)
                 eval->ApplyMutations(fwdMuts);
             else
                 eval->ApplyMutations(&revMuts);
+        }
+    }
+
+    // Now clean out anything that no longer aligns to the template
+    RemoveInvalidAlignments();
+    // And recalculate the likelihoods
+    for (auto& eval : evals_) {
+        if (eval) {
+            eval->Recalculate();
         }
     }
 

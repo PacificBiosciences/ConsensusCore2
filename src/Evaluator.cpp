@@ -20,11 +20,14 @@ Evaluator::Evaluator(std::unique_ptr<AbstractTemplate>&& tpl, const MappedRead& 
 
 Evaluator::Evaluator(Evaluator&& eval) : impl_{std::move(eval.impl_)} {}
 Evaluator::~Evaluator() {}
+
+size_t Evaluator::TemplateSpan() const {return impl_->TemplateSpan();}
 double Evaluator::LL(const Mutation& mut) { return impl_->LL(mut); }
 double Evaluator::LL() const { return impl_->LL(); }
 std::pair<double, double> Evaluator::NormalParameters() const { return impl_->NormalParameters(); }
 double Evaluator::ZScore() const { return impl_->ZScore(); }
 void Evaluator::ApplyMutation(const Mutation& mut) { impl_->ApplyMutation(mut); }
 void Evaluator::ApplyMutations(std::vector<Mutation>* muts) { impl_->ApplyMutations(muts); }
+void Evaluator::Recalculate() { impl_->Recalculate();}
 }  // namespace Consensus
 }  // namespace PacBio
