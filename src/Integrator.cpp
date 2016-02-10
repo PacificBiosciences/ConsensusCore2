@@ -202,6 +202,15 @@ void MonoMolecularIntegrator::ApplyMutation(const Mutation& fwdMut)
                 eval->ApplyMutation(revMut);
         }
     }
+    
+    // Now clean out anything that no longer aligns to the template
+    RemoveInvalidAlignments();
+    // And recalculate the likelihoods
+    for (auto& eval : evals_) {
+       if (eval) {
+               eval->Recalculate();
+            }
+    }   
 
     assert(fwdTpl_.Length() == revTpl_.Length());
 
@@ -314,6 +323,15 @@ void MultiMolecularIntegrator::ApplyMutation(const Mutation& fwdMut)
                 eval->ApplyMutation(fwdMut);
             else
                 eval->ApplyMutation(revMut);
+        }
+    }
+    
+    // Now clean out anything that no longer aligns to the template
+    RemoveInvalidAlignments();
+    // And recalculate the likelihoods
+    for (auto& eval : evals_) {
+        if (eval) {
+            eval->Recalculate();
         }
     }
 
