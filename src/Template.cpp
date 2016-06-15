@@ -52,7 +52,7 @@ bool AbstractTemplate::ApplyMutations(std::vector<Mutation>* const muts)
     bool mutsApplied = false;
 
     // make sure the mutations are sorted by site: End() then Start()
-    std::sort(muts->begin(), muts->end(), Mutation::SiteComparer);
+    std::stable_sort(muts->begin(), muts->end(), Mutation::SiteComparer);
 
     for (auto it = muts->crbegin(); it != muts->crend(); ++it)
         mutsApplied |= ApplyMutation(*it);

@@ -113,8 +113,8 @@ vector<Mutation> NearbyMutations(vector<Mutation>* applied,
 
     if (centers->empty()) return result;
 
-    sort(applied->begin(), applied->end(), Mutation::SiteComparer);
-    sort(centers->begin(), centers->end(), Mutation::SiteComparer);
+    stable_sort(applied->begin(), applied->end(), Mutation::SiteComparer);
+    stable_sort(centers->begin(), centers->end(), Mutation::SiteComparer);
 
     const auto mutRange = [clamp, neighborhood](const Mutation& mut, const int diff) {
         const int start = diff + mut.Start() - neighborhood;

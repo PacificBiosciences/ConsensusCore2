@@ -94,7 +94,7 @@ std::ostream& operator<<(std::ostream& out, const ScoredMutation& smut)
 
 std::string ApplyMutations(const std::string& oldTpl, std::vector<Mutation>* const muts)
 {
-    std::sort(muts->begin(), muts->end(), Mutation::SiteComparer);
+    std::stable_sort(muts->begin(), muts->end(), Mutation::SiteComparer);
     std::vector<Mutation>::const_reverse_iterator it;
 
     if (muts->empty() || oldTpl.empty()) return oldTpl;
