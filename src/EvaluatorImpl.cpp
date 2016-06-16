@@ -55,8 +55,11 @@ EvaluatorImpl::EvaluatorImpl(std::unique_ptr<AbstractTemplate>&& tpl, const Mapp
     , alpha_(mr.Length() + 1, recursor_->tpl_->Length() + 1, ScaledMatrix::FORWARD)
     , beta_(mr.Length() + 1, recursor_->tpl_->Length() + 1, ScaledMatrix::REVERSE)
     , extendBuffer_(mr.Length() + 1, EXTEND_BUFFER_COLUMNS, ScaledMatrix::FORWARD)
+    , mask_(recursor_->tpl_->Length())
+    , FilteredBases(0)
 {
     recursor_->FillAlphaBeta(alpha_, beta_);
+    CreateInsertionFilter();
 }
 
 std::string EvaluatorImpl::ReadName() const { return recursor_->read_.Name; }
@@ -73,6 +76,15 @@ double EvaluatorImpl::LL(const Mutation& mut_)
 
     // if the mutation didn't hit this read, just return the ll as-is
     if (!mut) return LL();
+    auto start = std::min((mask_.size() - 1), std::max(static_cast<size_t>(0), mut->Start()));
+    auto end   = std::min((mask_.size() - 1), std::max(static_cast<size_t>(0), mut->End()));
+    for (int j=start; j <= end; j++) {
+        if (mask_[j]) {
+            // reset the virtual mutation
+            recursor_->tpl_->Reset();
+            return LL();
+        }
+    }
 
     size_t betaLinkCol = 1 + mut->End();
     size_t absoluteLinkColumn = 1 + mut->End() + mut->LengthDiff();
@@ -169,6 +181,65 @@ double EvaluatorImpl::ZScore() const
     std::tie(mean, var) = NormalParameters();
     return (LL() - mean) / std::sqrt(var);
 }
+    
+    
+void EvaluatorImpl::CreateInsertionFilter() {
+    
+    try {
+        // Reset the array
+        mask_.resize(alpha_.Columns() - 1);
+        std::fill(mask_.begin(), mask_.end(), false);
+        FilteredBases = 0;
+        const auto insertcnts = recursor_->GetInsertionCounts(alpha_, beta_);
+        // What size window will we look at?
+        const int windowSize = 2;
+        const double maxAllowedInserts = 6.0; // Maximum number of allowed insertions in a Window size
+        const int minSplitDistance = 8;  // Minimum distance between two splits before they are merged
+        const int windowMaskPadding = 2; // If windowSize is bad, we mask it +/- padding
+        if (mask_.size() < 15) {
+            return;
+        }
+        // First to identify everything bad
+        int lastMaskPosition = -1;
+        double curInsertCount = 0.0;
+        // initialize
+        for(int i = 0; i < (windowSize -1); i++) {
+            curInsertCount += insertcnts.at(i);
+        }
+        int start, end;
+        for(int i = 0; i < (mask_.size() - windowSize); i++) {
+            curInsertCount += insertcnts.at(i + windowSize);
+            if (i > 0) {
+                curInsertCount -= insertcnts.at(i);
+            }
+            if (curInsertCount > maxAllowedInserts) {
+                start = std::max(0, (i - windowMaskPadding));
+                end = std::max(0, std::min((static_cast<int>(mask_.size()) - 1), i + windowMaskPadding + windowSize));
+                curInsertCount = 0.0;
+                for(int j = start; j < end; j++) {
+                    mask_[j] = true;
+                    FilteredBases++;
+                    if (j >= (i + windowMaskPadding) && j <= (i + windowSize + windowMaskPadding)) {
+                        curInsertCount += insertcnts.at(j);
+                    }
+                }
+                // Now do we need to cover the gap between here and the last mask position?
+                if (lastMaskPosition > 0 && (i - lastMaskPosition) <= minSplitDistance) {
+                    for(int j = lastMaskPosition ; j < start; j++) {
+                        mask_[j] = true;
+                        FilteredBases++;
+                    }
+                }
+            lastMaskPosition = end;
+            i = end;
+        }
+      // std::cout << (static_cast<double>(FilteredBases) / static_cast<double>(recursor_->tpl_->Length())) << std::endl;
+    }
+    } catch(std::exception& e) {
+        std::cout << "New thing doesn't work!" << std::endl;
+    }
+    
+}
 
 inline void EvaluatorImpl::Recalculate()
 {
@@ -178,6 +249,7 @@ inline void EvaluatorImpl::Recalculate()
     beta_.Reset(I, J);
     extendBuffer_.Reset(I, EXTEND_BUFFER_COLUMNS);
     recursor_->FillAlphaBeta(alpha_, beta_);
+    CreateInsertionFilter();
 }
 
 bool EvaluatorImpl::ApplyMutation(const Mutation& mut)

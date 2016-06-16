@@ -159,7 +159,7 @@ public:
                              size_t numExtColumns = 2) const = 0;
     virtual void ExtendBeta(const M& beta, size_t endColumn, M& ext, int lengthDiff = 0) const = 0;
     virtual double UndoCounterWeights(size_t nEmissions) const = 0;
-
+    virtual std::vector<double> GetInsertionCounts(M& alpha, M& beta) const = 0;
 public:
     std::unique_ptr<AbstractTemplate> tpl_;
     MappedRead read_;

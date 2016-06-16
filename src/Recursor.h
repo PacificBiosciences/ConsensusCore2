@@ -130,6 +130,8 @@ public:
     void ExtendAlpha(const M& alpha, size_t beginColumn, M& ext, size_t numExtColumns = 2) const;
 
     void ExtendBeta(const M& beta, size_t endColumn, M& ext, int lengthDiff = 0) const;
+    
+    std::vector<double> GetInsertionCounts(M& alpha, M& beta) const;
 
 private:
     std::pair<size_t, size_t> RowRange(size_t j, const M& matrix) const;
@@ -172,6 +174,59 @@ inline Interval RangeUnion(const Interval& range1, const Interval& range2, const
 inline double Combine(const double a, const double b) { return a + b; }
 }  // namespace anonymous
 
+    
+template <typename Derived>
+std::vector<double> Recursor<Derived>::GetInsertionCounts(M& alpha, M& beta) const {
+    size_t I = read_.Length();
+    size_t J = tpl_->Length();
+    std::vector<double> insertcnts(J);
+    auto localUndoCounterWeights = [](const size_t nEmissions)
+    {
+        //double kCounterWeight = 15.0;
+        double kCounterWeight = 15.0;
+        return -std::log(kCounterWeight) * nEmissions;
+    };
+    
+    const double LL = std::log(alpha(I, J)) + alpha.GetLogProdScales() +
+    localUndoCounterWeights(read_.Length());
+    
+    
+    for (int j = 1; j < (J -1); ++j)  // Note due to offset with reads and otherwise, this is ugly-ish
+    {
+        // Load up the transition parameters for this context
+        auto rngs = alpha.UsedRowRange(j);
+        auto start = rngs.first;
+        auto end = rngs.second;
+        
+        auto currTransProbs = (*tpl_)[j - 1];
+        auto currTplBase = currTransProbs.Idx;
+        size_t i;
+        auto nextTplBase = (*tpl_)[j].Idx;
+        double scale_beta = beta.GetLogScale(j);
+        auto prevTransProbs = kDefaultTplPos;
+        uint8_t prevTplBase = prevTransProbs.Idx;
+        double cnts = 0.0;
+        for (i = start + 1; i < end; ++i) {
+            const uint8_t curReadEm = emissions_[i - 1];
+            double lgBranch = 0.0;
+            double lgStick = 0.0;
+            double lgRev     = beta.GetLogScale(j)  + std::log(beta(i, j))      +  localUndoCounterWeights(I - i);
+            double lgForward = alpha.GetLogScale(j) + std::log(alpha(i - 1, j)) +  localUndoCounterWeights(i - 1);
+            lgBranch  = lgForward + std::log(currTransProbs.Branch * Derived::EmissionPr(MoveType::BRANCH, curReadEm, currTplBase, nextTplBase)) + localUndoCounterWeights(1);
+            lgStick   = lgForward + std::log(currTransProbs.Stick  * Derived::EmissionPr(MoveType::STICK,  curReadEm, currTplBase, nextTplBase)) + localUndoCounterWeights(1);
+            double prBranch = std::exp(lgBranch + lgRev - LL);
+            double prStick  = std::exp(lgStick  + lgRev - LL);
+            cnts += (prBranch + prStick);
+        }
+        insertcnts[j] = cnts;
+        // std::cout << cnts << std::endl;
+        prevTransProbs = currTransProbs;
+        prevTplBase = currTplBase;
+    }
+    
+    return insertcnts;
+}
+    
 template <typename Derived>
 void Recursor<Derived>::FillAlpha(const M& guide, M& alpha) const
 {
@@ -743,10 +798,13 @@ size_t Recursor<Derived>::FillAlphaBeta(M& a, M& b) const throw(AlphaBetaMismatc
 
         ++flipflops;
     }
+    
 
     if (std::abs(1.0 - alphaV / betaV) > ALPHA_BETA_MISMATCH_TOLERANCE || !std::isfinite(betaV))
         throw AlphaBetaMismatch();
-
+        
+    
+        
     return flipflops;
 }
 

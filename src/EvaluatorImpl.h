@@ -36,8 +36,10 @@ public:
 
 private:
     void Recalculate();
+    void CreateInsertionFilter();
 
 private:
+    int FilteredBases;
     std::unique_ptr<AbstractRecursor>
         recursor_;  // TODO: does this need to be a pointer?  is it always non-null?
                     // are we making it a UP just so we can do a fwd decl and still have
@@ -45,6 +47,7 @@ private:
     ScaledMatrix alpha_;
     ScaledMatrix beta_;
     ScaledMatrix extendBuffer_;
+    std::vector<bool> mask_;
 
     friend class Evaluator;
 };

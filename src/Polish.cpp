@@ -172,10 +172,11 @@ std::tuple<bool, size_t, size_t> Polish(AbstractIntegrator* ai, const PolishConf
 
             for (const auto& mut : muts) {
                 const double ll = ai->LL(mut);
-                if (ll > LL) scoredMuts.emplace_back(mut.WithScore(ll));
+                if ((ll - LL) > 1e-3) {
+                   scoredMuts.emplace_back(mut.WithScore(ll)); 
+                }
                 ++nTested;
             }
-
             // take best mutations in separation window, apply them
             muts = BestMutations(&scoredMuts, cfg.MutationSeparation);
         }
@@ -184,16 +185,15 @@ std::tuple<bool, size_t, size_t> Polish(AbstractIntegrator* ai, const PolishConf
         if (muts.empty()) return std::make_tuple(true, nTested, nApplied);
 
         const size_t newTpl = hashFn(ApplyMutations(*ai, &muts));
-
         if (history.find(newTpl) != history.end()) {
-            // cyclic behavior detected! apply just the single best mutation
-            ai->ApplyMutation(muts.front());
-            oldTpl = hashFn(*ai);
-            ++nApplied;
-
-            // get the mutations for the next round
-            std::vector<Mutation> applied = {muts.front()};
-            muts = NearbyMutations(&applied, &muts, *ai, cfg.MutationNeighborhood);
+            // cyclic behavior detected! end it
+            return std::make_tuple(true, nTested, nApplied);
+//            ai->ApplyMutation(muts.at(muts.size() - 1));
+//            oldTpl = hashFn(*ai);
+//            ++nApplied;
+//            // get the mutations for the next round
+//            std::vector<Mutation> applied = {muts.at(muts.size() - 1)};
+//            muts = NearbyMutations(&applied, &muts, *ai, cfg.MutationNeighborhood);
         } else {
             ai->ApplyMutations(&muts);
             oldTpl = newTpl;
