@@ -31,7 +31,7 @@ find_git_sha1(CC2_GIT_SHA1)
 
 configure_file(
     ${PacBioConsensus_IncludeDir}/pacbio/consensus/Version.h.in
-    ${PacBioConsensus_IncludeDir}/pacbio/consensus/Version.h
+    ${CMAKE_BINARY_DIR}/generated/pacbio/consensus/Version.h
 )
 
 file(GLOB_RECURSE PacBioConsensus_CPP "${PacBioConsensus_SourceDir}/*.cpp")
@@ -48,7 +48,10 @@ if(HAS_NO_UNUSED_VARIABLE)
 endif(HAS_NO_UNUSED_VARIABLE)
 
 # includes
-include_directories(. ${PacBioConsensus_IncludeDir})
+include_directories(
+    ${PacBioConsensus_IncludeDir}
+    ${CMAKE_BINARY_DIR}/generated
+)
 include_directories(SYSTEM
     ${Boost_INCLUDE_DIRS}
 )
