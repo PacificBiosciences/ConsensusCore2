@@ -1,3 +1,37 @@
+// Copyright (c) 2011-2016, Pacific Biosciences of California, Inc.
+//
+// All rights reserved.
+//
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted (subject to the limitations in the
+// disclaimer below) provided that the following conditions are met:
+//
+//  * Redistributions of source code must retain the above copyright
+//    notice, this list of conditions and the following disclaimer.
+//
+//  * Redistributions in binary form must reproduce the above
+//    copyright notice, this list of conditions and the following
+//    disclaimer in the documentation and/or other materials provided
+//    with the distribution.
+//
+//  * Neither the name of Pacific Biosciences nor the names of its
+//    contributors may be used to endorse or promote products derived
+//    from this software without specific prior written permission.
+//
+// NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE
+// GRANTED BY THIS LICENSE. THIS SOFTWARE IS PROVIDED BY PACIFIC
+// BIOSCIENCES AND ITS CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED
+// WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+// OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+// DISCLAIMED. IN NO EVENT SHALL PACIFIC BIOSCIENCES OR ITS
+// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF
+// USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+// ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+// OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
+// OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+// SUCH DAMAGE.
 
 #include <cassert>
 #include <cmath>
@@ -28,9 +62,8 @@ public:
     std::unique_ptr<AbstractRecursor> CreateRecursor(std::unique_ptr<AbstractTemplate>&& tpl,
                                                      const MappedRead& mr, double scoreDiff) const;
     std::vector<TemplatePosition> Populate(const std::string& tpl) const;
-    double ExpectedLogLikelihoodForMatchEmission(uint8_t prev, uint8_t curr, bool secondMoment) const;
-    double ExpectedLogLikelihoodForStickEmission(uint8_t prev, uint8_t curr, bool secondMoment) const;
-    double ExpectedLogLikelihoodForBranchEmission(uint8_t prev, uint8_t curr, bool secondMoment) const;
+    double ExpectedLLForEmission(MoveType move, uint8_t prev, uint8_t curr,
+                                 MomentType moment) const;
 private:
     SNR snr_;
     double cachedEmissionExpectations_[CONTEXT_NUMBER][3][2];
@@ -133,15 +166,8 @@ inline double CalculateExpectedLogLikelihoodOfOutcomeRow(const int index, const 
 }
 
 P4C2NoCovModel::P4C2NoCovModel(const SNR& snr)
-    : snr_(ClampSNR(snr, SNR(2.18,2.0,2.0,2.0), SNR(22.4, 22.9, 29.9, 26.5)))
+    : snr_(ClampSNR(snr, SNR(0, 0, 0, 0), SNR(20, 19, 20, 20)))
 {
-    for(int ctx = 0; ctx < CONTEXT_NUMBER; ctx++) {
-        for (int index = 0; index < 3; index++) {
-            cachedEmissionExpectations_[ctx][index][0] = CalculateExpectedLogLikelihoodOfOutcomeRow(index, ctx, false);
-            cachedEmissionExpectations_[ctx][index][1] = CalculateExpectedLogLikelihoodOfOutcomeRow(index, ctx, true);
-        }
-    }
-
 }
 
 std::vector<TemplatePosition> P4C2NoCovModel::Populate(const std::string& tpl) const
@@ -196,8 +222,6 @@ std::unique_ptr<AbstractRecursor> P4C2NoCovModel::CreateRecursor(
         new P4C2NoCovRecursor(std::forward<std::unique_ptr<AbstractTemplate>>(tpl), mr, scoreDiff));
 }
 
-
-
 inline int GetRow(uint8_t prev, uint8_t curr) {
     auto toAdd = prev == curr ? 0 : 4;
     const auto row = curr + toAdd;
@@ -210,15 +234,30 @@ double P4C2NoCovModel::ExpectedLogLikelihoodOfOutcomeRow(const int index, const 
     return cachedEmissionExpectations_[row][index][moment];
 }
 
-double P4C2NoCovModel::ExpectedLogLikelihoodForMatchEmission(uint8_t prev, uint8_t curr, bool secondMoment) const {
-    return ExpectedLogLikelihoodOfOutcomeRow(static_cast<uint8_t>(MoveType::MATCH), prev, curr, secondMoment);
+double P4C2NoCovModel::ExpectedLLForEmission(const MoveType move, const uint8_t prev,
+                                             const uint8_t curr, const MomentType moment) const
+{
+    const double lgThird = -std::log(3.0);
+    if (move == MoveType::MATCH) {
+        constexpr double probMatch = 1.0 - kEps;
+        constexpr double probMismatch = kEps;
+        const double lgMatch = std::log(probMatch);
+        const double lgMismatch = lgThird + std::log(probMismatch);
+        if (moment == MomentType::FIRST)
+            return probMatch * lgMatch + probMismatch * lgMismatch;
+        else if (moment == MomentType::SECOND)
+            return probMatch * (lgMatch * lgMatch) + probMismatch * (lgMismatch * lgMismatch);
+    } else if (move == MoveType::BRANCH)
+        return 0.0;
+    else if (move == MoveType::STICK) {
+        if (moment == MomentType::FIRST)
+            return lgThird;
+        else if (moment == MomentType::SECOND)
+            return lgThird * lgThird;
+    }
+    throw std::invalid_argument("invalid move!");
 }
-double P4C2NoCovModel::ExpectedLogLikelihoodForStickEmission(uint8_t prev, uint8_t curr, bool secondMoment) const {
-    return ExpectedLogLikelihoodOfOutcomeRow(static_cast<uint8_t>(MoveType::STICK), prev, curr, secondMoment);
-}
-double P4C2NoCovModel::ExpectedLogLikelihoodForBranchEmission(uint8_t prev, uint8_t curr, bool secondMoment) const {
-    return ExpectedLogLikelihoodOfOutcomeRow(static_cast<uint8_t>(MoveType::BRANCH), prev, curr, secondMoment);
-}    
+
 P4C2NoCovRecursor::P4C2NoCovRecursor(std::unique_ptr<AbstractTemplate>&& tpl, const MappedRead& mr,
                                      double scoreDiff)
     : Recursor<P4C2NoCovRecursor>(std::forward<std::unique_ptr<AbstractTemplate>>(tpl), mr,
