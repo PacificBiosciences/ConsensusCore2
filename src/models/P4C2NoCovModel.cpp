@@ -166,8 +166,14 @@ inline double CalculateExpectedLogLikelihoodOfOutcomeRow(const int index, const 
 }
 
 P4C2NoCovModel::P4C2NoCovModel(const SNR& snr)
-    : snr_(ClampSNR(snr, SNR(0, 0, 0, 0), SNR(20, 19, 20, 20)))
+    : snr_(ClampSNR(snr, SNR(2.18,2.0,2.0,2.0), SNR(22.4, 22.9, 29.9, 26.5)))
 {
+    for(int ctx = 0; ctx < CONTEXT_NUMBER; ctx++) {
+        for (int index = 0; index < 3; index++) {
+            cachedEmissionExpectations_[ctx][index][0] = CalculateExpectedLogLikelihoodOfOutcomeRow(index, ctx, false);
+            cachedEmissionExpectations_[ctx][index][1] = CalculateExpectedLogLikelihoodOfOutcomeRow(index, ctx, true);
+        }
+    }
 }
 
 std::vector<TemplatePosition> P4C2NoCovModel::Populate(const std::string& tpl) const
@@ -237,25 +243,9 @@ double P4C2NoCovModel::ExpectedLogLikelihoodOfOutcomeRow(const int index, const 
 double P4C2NoCovModel::ExpectedLLForEmission(const MoveType move, const uint8_t prev,
                                              const uint8_t curr, const MomentType moment) const
 {
-    const double lgThird = -std::log(3.0);
-    if (move == MoveType::MATCH) {
-        constexpr double probMatch = 1.0 - kEps;
-        constexpr double probMismatch = kEps;
-        const double lgMatch = std::log(probMatch);
-        const double lgMismatch = lgThird + std::log(probMismatch);
-        if (moment == MomentType::FIRST)
-            return probMatch * lgMatch + probMismatch * lgMismatch;
-        else if (moment == MomentType::SECOND)
-            return probMatch * (lgMatch * lgMatch) + probMismatch * (lgMismatch * lgMismatch);
-    } else if (move == MoveType::BRANCH)
-        return 0.0;
-    else if (move == MoveType::STICK) {
-        if (moment == MomentType::FIRST)
-            return lgThird;
-        else if (moment == MomentType::SECOND)
-            return lgThird * lgThird;
-    }
-    throw std::invalid_argument("invalid move!");
+    const size_t row = GetRow(prev, curr);
+    return cachedEmissionExpectations_[row][static_cast<uint8_t>(move)]
+                                      [static_cast<uint8_t>(moment)];
 }
 
 P4C2NoCovRecursor::P4C2NoCovRecursor(std::unique_ptr<AbstractTemplate>&& tpl, const MappedRead& mr,
