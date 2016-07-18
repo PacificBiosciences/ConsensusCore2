@@ -33,66 +33,63 @@
 // OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 // SUCH DAMAGE.
 
-#include <stdexcept>
-#include <string>
+#pragma once
 
-#include <pacbio/consensus/Sequence.h>
+#include <cstdint>
+#include <functional>
+#include <iostream>
+#include <memory>
+#include <set>
+
+#include <pacbio/consensus/AbstractIntegrator.h>
+#include <pacbio/consensus/Evaluator.h>
+#include <pacbio/consensus/Exceptions.h>
+#include <pacbio/consensus/Mutation.h>
+#include <pacbio/consensus/State.h>
+
+#ifdef DEBUG_BAM_OUTPUT
+#include <pbbam/BamRecord.h>
+#endif
 
 namespace PacBio {
 namespace Consensus {
 
-char Complement(char base)
+class MultiMolecularIntegrator : public AbstractIntegrator
 {
-    switch (base) {
-        case 'A':
-            return 'T';
-        case 'a':
-            return 't';
-        case 'C':
-            return 'G';
-        case 'c':
-            return 'g';
-        case 'G':
-            return 'C';
-        case 'g':
-            return 'c';
-        case 'T':
-            return 'A';
-        case 't':
-            return 'a';
-        case '-':
-            return '-';
-        default:
-            throw std::invalid_argument("invalid base!");
-    }
-}
+public:
+    MultiMolecularIntegrator(const std::string& tpl, const IntegratorConfig& cfg);
 
-std::string Complement(const std::string& input)
-{
-    std::string output;
-    output.reserve(input.length());
-    for (const char b : input)
-        output.push_back(Complement(b));
-    return output;
-}
+    size_t TemplateLength() const;
 
-std::string Reverse(const std::string& input)
-{
-    std::string output;
-    output.reserve(input.length());
-    for (auto it = input.crbegin(); it != input.crend(); ++it)
-        output.push_back(*it);
-    return output;
-}
+    char operator[](size_t i) const;
+    operator std::string() const;
 
-std::string ReverseComplement(const std::string& input)
-{
-    std::string output;
-    output.reserve(input.length());
-    for (auto it = input.crbegin(); it != input.crend(); ++it)
-        output.push_back(Complement(*it));
-    return output;
-}
+#ifdef DEBUG_BAM_OUTPUT
+    std::string ReadToCigar(const MappedRead& read) const;
+    std::vector<PacBio::BAM::BamRecordImpl> ToBamRecords(const int32_t rid) const;
+    void WriteBamFile(const std::string& filepath, 
+                      const std::string& name = "fwdtpl",
+                      const bool sorted = true,
+                      const bool indexed = true) const;
+    void WriteReferenceFasta(const std::string& filepath, 
+                             const std::string& name = "fwdtpl") const;
+    void WriteAlignments(const std::string& filePrefix) const;
+#endif
+
+    void ApplyMutation(const Mutation& mut);
+    void ApplyMutations(std::vector<Mutation>* muts);
+
+    State AddRead(const MappedRead& read);
+
+protected:
+    std::unique_ptr<AbstractTemplate> GetTemplate(const MappedRead& read, const SNR& snr);
+
+    std::string fwdTpl_;
+    std::string revTpl_;
+
+private:
+    friend struct std::hash<MultiMolecularIntegrator>;
+};
 
 }  // namespace Consensus
 }  // namespace PacBio

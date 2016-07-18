@@ -1,4 +1,4 @@
-// Copyright (c) 2011-2013, Pacific Biosciences of California, Inc.
+// Copyright (c) 2011-2016, Pacific Biosciences of California, Inc.
 //
 // All rights reserved.
 //
@@ -72,6 +72,7 @@ public:  // Information about entries filled by column
     std::pair<size_t, size_t> UsedRowRange(size_t j) const;
     bool IsColumnEmpty(size_t j) const;
     size_t UsedEntries() const;
+    float UsedEntriesRatio() const;
     size_t AllocatedEntries() const;  // an entry may be allocated but not used
 
 public:  // Accessors
@@ -139,13 +140,13 @@ inline void SparseMatrix::FinishEditingColumn(size_t j, size_t usedRowsBegin, si
 
 inline std::pair<size_t, size_t> SparseMatrix::UsedRowRange(size_t j) const
 {
-    assert(0 <= j && j < usedRanges_.size());
+    assert(j < usedRanges_.size());
     return usedRanges_[j];
 }
 
 inline bool SparseMatrix::IsColumnEmpty(size_t j) const
 {
-    assert(0 <= j && j < usedRanges_.size());
+    assert(j < usedRanges_.size());
     size_t begin, end;
     std::tie(begin, end) = usedRanges_[j];
     return begin >= end;

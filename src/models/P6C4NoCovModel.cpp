@@ -1,3 +1,37 @@
+// Copyright (c) 2011-2016, Pacific Biosciences of California, Inc.
+//
+// All rights reserved.
+//
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted (subject to the limitations in the
+// disclaimer below) provided that the following conditions are met:
+//
+//  * Redistributions of source code must retain the above copyright
+//    notice, this list of conditions and the following disclaimer.
+//
+//  * Redistributions in binary form must reproduce the above
+//    copyright notice, this list of conditions and the following
+//    disclaimer in the documentation and/or other materials provided
+//    with the distribution.
+//
+//  * Neither the name of Pacific Biosciences nor the names of its
+//    contributors may be used to endorse or promote products derived
+//    from this software without specific prior written permission.
+//
+// NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE
+// GRANTED BY THIS LICENSE. THIS SOFTWARE IS PROVIDED BY PACIFIC
+// BIOSCIENCES AND ITS CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED
+// WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+// OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+// DISCLAIMED. IN NO EVENT SHALL PACIFIC BIOSCIENCES OR ITS
+// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF
+// USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+// ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+// OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
+// OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+// SUCH DAMAGE.
 
 #include <cassert>
 #include <cmath>
@@ -27,7 +61,8 @@ public:
     std::unique_ptr<AbstractRecursor> CreateRecursor(std::unique_ptr<AbstractTemplate>&& tpl,
                                                      const MappedRead& mr, double scoreDiff) const;
     std::vector<TemplatePosition> Populate(const std::string& tpl) const;
-    double SubstitutionRate(uint8_t prev, uint8_t curr) const;
+    double ExpectedLLForEmission(MoveType move, uint8_t prev, uint8_t curr,
+                                 MomentType moment) const;
 
 private:
     SNR snr_;
@@ -84,7 +119,14 @@ double P6C4NoCovParams[4][2][3][4] = {
       {4.21031404956015, -0.347546363361823, 0.0293839179303896, -0.000893802212450644},
       {2.33143889851302, -0.586068444099136, 0.040044954697795, -0.000957298861394191}}}};
 
-P6C4NoCovModel::P6C4NoCovModel(const SNR& snr) : snr_(snr) {}
+// For P6-C4 we cap SNR at 20.0 (19.0 for C); as the training set only went that
+// high; extrapolation beyond this cap goes haywire because of the higher-order
+// terms in the regression model.  See bug 31423.
+P6C4NoCovModel::P6C4NoCovModel(const SNR& snr)
+    : snr_(ClampSNR(snr, SNR(0, 0, 0, 0), SNR(20, 19, 20, 20)))
+{
+}
+
 std::vector<TemplatePosition> P6C4NoCovModel::Populate(const std::string& tpl) const
 {
     std::vector<TemplatePosition> result;
@@ -137,7 +179,30 @@ std::unique_ptr<AbstractRecursor> P6C4NoCovModel::CreateRecursor(
         new P6C4NoCovRecursor(std::forward<std::unique_ptr<AbstractTemplate>>(tpl), mr, scoreDiff));
 }
 
-double P6C4NoCovModel::SubstitutionRate(uint8_t prev, uint8_t curr) const { return kEps; }
+double P6C4NoCovModel::ExpectedLLForEmission(const MoveType move, const uint8_t prev,
+                                             const uint8_t curr, const MomentType moment) const
+{
+    const double lgThird = -std::log(3.0);
+    if (move == MoveType::MATCH) {
+        constexpr double probMatch = 1.0 - kEps;
+        constexpr double probMismatch = kEps;
+        const double lgMatch = std::log(probMatch);
+        const double lgMismatch = lgThird + std::log(probMismatch);
+        if (moment == MomentType::FIRST)
+            return probMatch * lgMatch + probMismatch * lgMismatch;
+        else if (moment == MomentType::SECOND)
+            return probMatch * (lgMatch * lgMatch) + probMismatch * (lgMismatch * lgMismatch);
+    } else if (move == MoveType::BRANCH)
+        return 0.0;
+    else if (move == MoveType::STICK) {
+        if (moment == MomentType::FIRST)
+            return lgThird;
+        else if (moment == MomentType::SECOND)
+            return lgThird * lgThird;
+    }
+    throw std::invalid_argument("invalid move!");
+}
+
 P6C4NoCovRecursor::P6C4NoCovRecursor(std::unique_ptr<AbstractTemplate>&& tpl, const MappedRead& mr,
                                      double scoreDiff)
     : Recursor<P6C4NoCovRecursor>(std::forward<std::unique_ptr<AbstractTemplate>>(tpl), mr,

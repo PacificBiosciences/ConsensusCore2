@@ -10,6 +10,8 @@ dependencies:
         - sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
         - sudo apt-get update
         - sudo apt-get install g++-4.8
+        - curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.deb.sh | sudo bash
+        - sudo apt-get install git-lfs=1.1.0
         - if [ ! -d _deps ] ; then mkdir _deps ; fi  # Create a directory for dependencies, These are static, cache them.
         - pushd _deps ; if [ ! -d cmake-3.3.0-Linux-x86_64 ] ; then wget --no-check-certificate https://www.cmake.org/files/v3.3/cmake-3.3.0-Linux-x86_64.tar.gz ; tar xzf cmake-3.3.0-Linux-x86_64.tar.gz ; fi
         - pushd _deps ; if [ ! -d boost_1_58_0 ] ; then wget https://downloads.sourceforge.net/project/boost/boost/1.58.0/boost_1_58_0.tar.bz2 ; tar xjf boost_1_58_0.tar.bz2 ; fi
@@ -17,17 +19,20 @@ dependencies:
         - mkdir _rev_deps  # Create a directory for reverse-dependencies, ie things that depend on us. These are not static, do not cache them.
         - pushd _rev_deps ; git clone https://github.com/PacificBiosciences/htslib.git
         - pushd _rev_deps ; git clone https://github.com/PacificBiosciences/pbbam.git
-        - pushd _rev_deps ; git clone https://github.com/PacificBiosciences/seqan.git
         - pushd _rev_deps ; git clone https://github.com/PacificBiosciences/pbccs.git
+        - pushd _rev_deps ; git clone https://${TOKEN}@github.com/PacificBiosciences/pblaa.git
         - pushd _rev_deps ; git clone https://${TOKEN}@github.com/PacificBiosciences/pbsparse.git
         - pushd _rev_deps ; git clone https://${TOKEN}@github.com/PacificBiosciences/pbchimera.git
-        - pushd _rev_deps ; git clone https://${TOKEN}@github.com/PacificBiosciences/pblaa.git
+        - pushd _rev_deps ; git clone https://github.com/PacificBiosciences/seqan.git
+        - pushd _rev_deps ; git clone https://github.com/PacificBiosciences/PacBioTestData.git
         - pip install --upgrade pip
         - pip install numpy
         - pip install cython
         - pip install h5py
         - pip install pysam
         - pip install git+https://github.com/PacificBiosciences/pbcommand.git git+https://github.com/PacificBiosciences/pbcore.git
+        - pushd _rev_deps/PacBioTestData ; git lfs pull && make python
+
     override:
         - echo "Building PBBAM"
         - mkdir _build_bam
@@ -36,13 +41,13 @@ dependencies:
 test:
     pre:
         - mkdir _build
-        - pushd _build ; CC=gcc-4.8 CXX=g++-4.8 $(readlink -f ../_deps/cmake-3.3.0-Linux-x86_64/bin/cmake) -DCMAKE_BUILD_TYPE=Debug -DBoost_INCLUDE_DIRS=$(readlink -f ../_deps/boost_1_58_0) ..
+        - pushd _build ; CC=gcc-4.8 CXX=g++-4.8 $(readlink -f ../_deps/cmake-3.3.0-Linux-x86_64/bin/cmake) -DCMAKE_BUILD_TYPE=Debug -DBoost_INCLUDE_DIRS=$(readlink -f ../_deps/boost_1_58_0) -DEXTENSIVE_TESTING=1 ..
     override:
         - pushd _build ; make
         - pushd _build ; make check
-        - pushd _build ; rm -rf * ; CC=gcc-4.8 CXX=g++-4.8 $(readlink -f ../_deps/cmake-3.3.0-Linux-x86_64/bin/cmake) -DCMAKE_BUILD_TYPE=Release -DBoost_INCLUDE_DIRS=$(readlink -f ../_deps/boost_1_58_0) ..
+        - pushd _build ; rm -rf * ; CC=gcc-4.8 CXX=g++-4.8 $(readlink -f ../_deps/cmake-3.3.0-Linux-x86_64/bin/cmake) -DCMAKE_BUILD_TYPE=Release -DBoost_INCLUDE_DIRS=$(readlink -f ../_deps/boost_1_58_0) -DEXTENSIVE_TESTING=1 ..
         - pushd _build ; make clean ; make test_pbconsensus
-        - tests/bin/test_pbconsensus --gtest_filter=IntegratorTest.TestLongTemplateTiming
+        - tests/bin/test_pbconsensus --gtest_filter=IntegratorTest.TestLongTemplateTiming*
         - CC=gcc-4.8 CXX=g++-4.8 CMAKE_COMMAND=$(readlink -f _deps/cmake-3.3.0-Linux-x86_64/bin/cmake) Boost_INCLUDE_DIRS=$(readlink -f _deps/boost_1_58_0) SWIG_COMMAND=$(readlink -f _deps/swig-3.0.8/bin/swig) VERBOSE=1 pip install --verbose --upgrade --no-deps .
         - python -c "import ConsensusCore2 ; print ConsensusCore2.__version__"
     post:

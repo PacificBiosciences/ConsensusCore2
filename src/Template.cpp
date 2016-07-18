@@ -1,9 +1,44 @@
+// Copyright (c) 2011-2016, Pacific Biosciences of California, Inc.
+//
+// All rights reserved.
+//
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted (subject to the limitations in the
+// disclaimer below) provided that the following conditions are met:
+//
+//  * Redistributions of source code must retain the above copyright
+//    notice, this list of conditions and the following disclaimer.
+//
+//  * Redistributions in binary form must reproduce the above
+//    copyright notice, this list of conditions and the following
+//    disclaimer in the documentation and/or other materials provided
+//    with the distribution.
+//
+//  * Neither the name of Pacific Biosciences nor the names of its
+//    contributors may be used to endorse or promote products derived
+//    from this software without specific prior written permission.
+//
+// NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE
+// GRANTED BY THIS LICENSE. THIS SOFTWARE IS PROVIDED BY PACIFIC
+// BIOSCIENCES AND ITS CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED
+// WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+// OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+// DISCLAIMED. IN NO EVENT SHALL PACIFIC BIOSCIENCES OR ITS
+// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF
+// USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+// ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+// OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
+// OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+// SUCH DAMAGE.
 
 #include <cassert>
 #include <cmath>
 #include <sstream>
 #include <stdexcept>
 
+#include <pacbio/consensus/Exceptions.h>
 #include <pacbio/consensus/Template.h>
 
 namespace PacBio {
@@ -14,6 +49,11 @@ AbstractTemplate::AbstractTemplate(const size_t start, const size_t end, const b
     : start_{start}, end_{end}, pinStart_{pinStart}, pinEnd_{pinEnd}
 {
     assert(start_ <= end_);
+
+    // Templates that are below two bases are not allowed.
+    // This exception will get propagted up the chain up to the Integrator
+    // constructor or Integrator::AddRead.
+    if (end_ - start_ < 2) throw TemplateTooSmall();
 }
 
 AbstractTemplate::~AbstractTemplate() {}
@@ -133,28 +173,22 @@ size_t AbstractTemplate::TrueLength() const { return end_ - start_; }
 */
 std::pair<double, double> AbstractTemplate::SiteNormalParameters(const size_t i) const
 {
-    // TODO (ndelaney): This probably needs to be matched to the specific model being used.
-    // std::log(1.0/3);
-    constexpr double lgThird = -1.0986122886681098;
-    const uint8_t prev = (i == 0) ? 0 : (*this)[i - 1].Idx;  // default base : A
     const auto params = (*this)[i];
-
-    // get the substitution rate here:
-    const double eps = SubstitutionRate(prev, params.Idx);
+    // TODO: This is a bit unsafe, we should understand context and have this conversion in one
+    // place (or really just move directly to using .Idx without bit shifting
+    const uint8_t prev = (i == 0) ? 0 : (*this)[i - 1].Idx;  // default base : A
+    const uint8_t curr = params.Idx;
 
     const double p_m = params.Match, l_m = std::log(p_m), l2_m = l_m * l_m;
     const double p_d = params.Deletion, l_d = std::log(p_d), l2_d = l_d * l_d;
     const double p_b = params.Branch, l_b = std::log(p_b), l2_b = l_b * l_b;
     const double p_s = params.Stick, l_s = std::log(p_s), l2_s = l_s * l_s;
 
-    const double lgeps = std::log(eps);
-    const double lg1minusEps = std::log(1.0 - eps);
-
     // First moment expectations (zero terms used for clarity)
-    const double E_M = (1.0 - eps) * lg1minusEps + eps * (lgThird + lgeps);
+    const double E_M = ExpectedLLForEmission(MoveType::MATCH, prev, curr, MomentType::FIRST);
     const double E_D = 0.0;
-    const double E_B = 0.0;
-    const double E_S = lgThird;
+    const double E_B = ExpectedLLForEmission(MoveType::BRANCH, prev, curr, MomentType::FIRST);
+    const double E_S = ExpectedLLForEmission(MoveType::STICK, prev, curr, MomentType::FIRST);
 
     // Calculate first moment
     const double E_MD = (l_m + E_M) * p_m / (p_m + p_d) + (l_d + E_D) * p_d / (p_m + p_d);
@@ -164,12 +198,13 @@ std::pair<double, double> AbstractTemplate::SiteNormalParameters(const size_t i)
 
     // Calculate second momment
     // Key expansion used repeatedly here: (A + B)^2 = A^2 + 2AB + B^2
-    const double E2_M = (1.0 - eps) * pow(lg1minusEps, 2.0) + eps * pow(lgThird + lgeps, 2.0);
+    const double E2_M = ExpectedLLForEmission(MoveType::MATCH, prev, curr, MomentType::SECOND);
+    const double E2_S = ExpectedLLForEmission(MoveType::STICK, prev, curr, MomentType::SECOND);
+    const double E2_B = ExpectedLLForEmission(MoveType::BRANCH, prev, curr, MomentType::SECOND);
     const double E2_MD =
         (l2_m + 2 * l_m * E_M + E2_M) * p_m / (p_m + p_d) + l2_d * p_d / (p_m + p_d);
-    const double E2_S = pow(lgThird, 2.0);
-    const double E2_I =
-        l2_b * p_b / (p_b + p_s) + (l2_s + 2 * E_S * l_s + E2_S) * p_s / (p_b + p_s);
+    const double E2_I = (l2_b + 2 * E_B * l_b + E2_B) * p_b / (p_b + p_s) +
+                        (l2_s + 2 * E_S * l_s + E2_S) * p_s / (p_b + p_s);
     const double E2_BS = E2_I * (p_s + p_b) / (p_m + p_d);
     const double moment2 = E2_BS + 2 * E_BS * E_MD + E2_MD;
     const double var = moment2 - mean * mean;
@@ -251,9 +286,12 @@ boost::optional<Mutation> Template::Mutate(const Mutation& mut)
     mutOff_ = mut.LengthDiff();
     mutated_ = true;
 
+    // Either the length is 0 or an operation had been applied
     assert(Length() == 0 ||
            ((*this)[Length() - 1].Match == 1.0 && (*this)[Length() - 1].Branch == 0.0 &&
             (*this)[Length() - 1].Stick == 0.0 && (*this)[Length() - 1].Deletion == 0.0));
+
+    if (Length() < 2) throw TemplateTooSmall();
 
     return Mutation(mut.Type, mutStart_, mut.Base);
 }
@@ -324,6 +362,8 @@ finish:
             (*this)[Length() - 1].Stick == 0.0 && (*this)[Length() - 1].Deletion == 0.0));
 
     assert(!pinStart_ || start_ == 0);
+
+    if (Length() < 2) throw TemplateTooSmall();
 
     return mutApplied;
 }

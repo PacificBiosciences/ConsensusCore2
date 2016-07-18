@@ -1,4 +1,4 @@
-// Copyright (c) 2011-2013, Pacific Biosciences of California, Inc.
+// Copyright (c) 2011-2016, Pacific Biosciences of California, Inc.
 //
 // All rights reserved.
 //
@@ -81,6 +81,13 @@ size_t SparseMatrix::UsedEntries() const
         filledEntries += (end - start);
     }
     return filledEntries;
+}
+
+float SparseMatrix::UsedEntriesRatio() const
+{
+    const float filled = static_cast<float>(UsedEntries());
+    const float size = static_cast<float>(Rows() * Columns());
+    return filled / size;
 }
 
 size_t SparseMatrix::AllocatedEntries() const

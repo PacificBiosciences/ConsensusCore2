@@ -1,4 +1,4 @@
-// Copyright (c) 2011-2016, Pacific Biosciences of California, Inc.
+// Copyright (c) 2016, Pacific Biosciences of California, Inc.
 //
 // All rights reserved.
 //
@@ -33,66 +33,22 @@
 // OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 // SUCH DAMAGE.
 
-#include <stdexcept>
-#include <string>
-
-#include <pacbio/consensus/Sequence.h>
+#pragma once
 
 namespace PacBio {
 namespace Consensus {
 
-char Complement(char base)
+enum struct State : uint8_t
 {
-    switch (base) {
-        case 'A':
-            return 'T';
-        case 'a':
-            return 't';
-        case 'C':
-            return 'G';
-        case 'c':
-            return 'g';
-        case 'G':
-            return 'C';
-        case 'g':
-            return 'c';
-        case 'T':
-            return 'A';
-        case 't':
-            return 'a';
-        case '-':
-            return '-';
-        default:
-            throw std::invalid_argument("invalid base!");
-    }
-}
+    VALID = 0,
+    ALPHA_BETA_MISMATCH,
+    POOR_ZSCORE,
+    TEMPLATE_TOO_SMALL,
+    MANUALLY_RELEASED,
 
-std::string Complement(const std::string& input)
-{
-    std::string output;
-    output.reserve(input.length());
-    for (const char b : input)
-        output.push_back(Complement(b));
-    return output;
-}
+    SIZE
+};
 
-std::string Reverse(const std::string& input)
-{
-    std::string output;
-    output.reserve(input.length());
-    for (auto it = input.crbegin(); it != input.crend(); ++it)
-        output.push_back(*it);
-    return output;
+static const char* StateName[] = {"VALID", "ALPHA/BETA MISMATCH", "POOR Z-SCORE", "NULL TEMPLATE"};
 }
-
-std::string ReverseComplement(const std::string& input)
-{
-    std::string output;
-    output.reserve(input.length());
-    for (auto it = input.crbegin(); it != input.crend(); ++it)
-        output.push_back(Complement(*it));
-    return output;
-}
-
-}  // namespace Consensus
-}  // namespace PacBio
+}  //::PacBio::Consensus
