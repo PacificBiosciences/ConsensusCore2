@@ -19,8 +19,8 @@ dependencies:
         - mkdir _rev_deps  # Create a directory for reverse-dependencies, ie things that depend on us. These are not static, do not cache them.
         - pushd _rev_deps ; git clone https://github.com/PacificBiosciences/htslib.git
         - pushd _rev_deps ; git clone https://github.com/PacificBiosciences/pbbam.git
-        - pushd _rev_deps ; git clone https://github.com/PacificBiosciences/pbccs.git
-        - pushd _rev_deps ; git clone https://${TOKEN}@github.com/PacificBiosciences/pblaa.git
+        - pushd _rev_deps ; git clone -b loadModels https://github.com/PacificBiosciences/pbccs.git
+        - pushd _rev_deps ; git clone -b loadModels https://${TOKEN}@github.com/PacificBiosciences/pblaa.git
         - pushd _rev_deps ; git clone https://${TOKEN}@github.com/PacificBiosciences/pbsparse.git
         - pushd _rev_deps ; git clone https://${TOKEN}@github.com/PacificBiosciences/pbchimera.git
         - pushd _rev_deps ; git clone https://github.com/PacificBiosciences/seqan.git
@@ -47,7 +47,7 @@ test:
         - pushd _build ; make check
         - pushd _build ; rm -rf * ; CC=gcc-4.8 CXX=g++-4.8 $(readlink -f ../_deps/cmake-3.3.0-Linux-x86_64/bin/cmake) -DCMAKE_BUILD_TYPE=Release -DBoost_INCLUDE_DIRS=$(readlink -f ../_deps/boost_1_58_0) -DEXTENSIVE_TESTING=1 ..
         - pushd _build ; make clean ; make test_pbconsensus
-        - tests/bin/test_pbconsensus --gtest_filter=IntegratorTest.TestLongTemplateTiming*
+        - tests/bin/test_pbconsensus --gtest_filter=IntegratorTest.TestLongTemplateTiming*:LoadModelsTest.ModelTiming
         - CC=gcc-4.8 CXX=g++-4.8 CMAKE_COMMAND=$(readlink -f _deps/cmake-3.3.0-Linux-x86_64/bin/cmake) Boost_INCLUDE_DIRS=$(readlink -f _deps/boost_1_58_0) SWIG_COMMAND=$(readlink -f _deps/swig-3.0.8/bin/swig) VERBOSE=1 pip install --verbose --upgrade --no-deps .
         - python -c "import ConsensusCore2 ; print ConsensusCore2.__version__"
     post:
