@@ -55,6 +55,9 @@ class ModelConfig;
 
 // this pattern is based on
 // http://blog.fourthwoods.com/2011/06/04/factory-design-pattern-in-c/
+
+// An abstract class with a single abstract method, Create, for
+//   instantiating a concrete model given the discriminative SNR
 class ModelCreator
 {
 public:
@@ -62,6 +65,9 @@ public:
     virtual std::unique_ptr<ModelConfig> Create(const SNR&) const = 0;
 };
 
+// A static class containing the map of parameterized models that need
+//   only SNR to become concrete, with methods to create such models,
+//   register models, resolve models, and list available models
 class ModelFactory
 {
 public:
@@ -74,6 +80,9 @@ private:
     static std::map<std::string, std::unique_ptr<ModelCreator>>& CreatorTable();
 };
 
+// The concrete form of ModelCreator, which registers a compiled-in
+//   model with the ModelFactory and implements the aforementioned
+//   Create method for instantiating a concrete model given an SNR
 template <typename T>
 class ModelCreatorImpl : public ModelCreator
 {
@@ -93,6 +102,7 @@ public:
     }
 };
 
+// An accessor to a global parameter for overriding the model
 boost::optional<std::string>& ModelOverride();
 
 #define REGISTER_MODEL(cls) \
