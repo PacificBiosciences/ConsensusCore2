@@ -1,4 +1,4 @@
-// Copyright (c) 2011-2016, Pacific Biosciences of California, Inc.
+// Copyright (c) 2016, Pacific Biosciences of California, Inc.
 //
 // All rights reserved.
 //
@@ -33,58 +33,22 @@
 // OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 // SUCH DAMAGE.
 
+// Author: Lance Hepler
+
 #pragma once
 
-#include <stdexcept>
+#include <set>
 #include <string>
-
-#include <pacbio/consensus/State.h>
 
 namespace PacBio {
 namespace Consensus {
 
-class StateError : public std::runtime_error
-{
-public:
-    StateError(State state, const std::string& msg) : std::runtime_error(msg), state_(state) {}
-    State WhatState() const { return state_; }
-    virtual const char* what() const noexcept { return std::runtime_error::what(); }
-private:
-    State state_;
-};
+std::set<std::string> SupportedModels();
+std::set<std::string> SupportedChemistries();
 
-class TemplateTooSmall : public StateError
-{
-public:
-    TemplateTooSmall() : StateError(State::TEMPLATE_TOO_SMALL, "Template too short!") {}
-};
+bool OverrideModel(const std::string& model);
+bool UnOverrideModel();
 
-class AlphaBetaMismatch : public StateError
-{
-public:
-    AlphaBetaMismatch() : StateError(State::ALPHA_BETA_MISMATCH, "Alpha/beta mismatch!") {}
-};
-
-class ChemistryNotFound : public std::runtime_error
-{
-public:
-    ChemistryNotFound(const std::string& name)
-        : std::runtime_error(std::string("chemistry not found: '") + name + "'")
-    {
-    }
-};
-
-class DuplicateModel : public std::runtime_error
-{
-public:
-    DuplicateModel(const std::string& name) : std::runtime_error("duplicate model: '" + name + "'") {}
-};
-
-class MalformedModelFile : public std::runtime_error
-{
-public:
-    MalformedModelFile() : std::runtime_error("malformed model!") {}
-};
-
-}  // namespace Consensus
-}  // namespace PacBio
+size_t LoadModels(const std::string& path);
+}
+}

@@ -18,13 +18,11 @@ file(MAKE_DIRECTORY  ${PacBioConsensus_TestsDir}/bin)
 
 include_directories(
     ${PacBioConsensus_IncludeDir}
+    ${CMAKE_BINARY_DIR}/generated
 )
 
 # Generate paths for test data
-#configure_file(
-#    ${PacBioConsensus_TestsDir}/TestData.h.in
-#    ${PacBioConsensus_TestsDir}/TestData.h
-#)
+configure_file(${PacBioConsensus_TestsDir}/TestData.h.in ${CMAKE_BINARY_DIR}/generated/TestData.h)
 
 include_directories(SYSTEM
     ${Boost_INCLUDE_DIRS}

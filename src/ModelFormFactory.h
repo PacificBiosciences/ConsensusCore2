@@ -1,4 +1,4 @@
-// Copyright (c) 2015-2016, Pacific Biosciences of California, Inc.
+// Copyright (c) 2016, Pacific Biosciences of California, Inc.
 //
 // All rights reserved.
 //
@@ -39,16 +39,14 @@
 
 #include <map>
 #include <memory>
-#include <set>
 #include <string>
 
-#include <boost/optional.hpp>
+#include <boost/property_tree/ptree.hpp>
 
-#include <pacbio/consensus/Exceptions.h>
+#include "ModelFactory.h"
 
 namespace PacBio {
 namespace Consensus {
-
 // forward declarations
 struct SNR;
 class ModelConfig;
@@ -56,60 +54,58 @@ class ModelConfig;
 // this pattern is based on
 // http://blog.fourthwoods.com/2011/06/04/factory-design-pattern-in-c/
 
-// An abstract class with a single abstract method, Create, for
-//   instantiating a concrete model given the discriminative SNR
-class ModelCreator
+// An abstract class defining a single abstract method, LoadParams, for
+//   parameterizing a model form yielding a ModelCreator that can be
+//   used to instantiate a concrete model given an SNR (see ModelCreator)
+class ModelFormCreator
 {
 public:
-    virtual ~ModelCreator() {}
-    virtual std::unique_ptr<ModelConfig> Create(const SNR&) const = 0;
+    virtual ~ModelFormCreator() {}
+    virtual std::unique_ptr<ModelCreator> LoadParams(
+        const boost::property_tree::ptree& pt) const = 0;
 };
 
-// A static class containing the map of parameterized models that need
-//   only SNR to become concrete, with methods to create such models,
-//   register models, resolve models, and list available models
-class ModelFactory
+// A static factory class that holds onto all available model forms,
+//   with methods to: get the static map of ModelFormCreators accessible
+//   by their form name; to register a form within said map; and to load
+//   a model parameter file, find its model form, and insert a
+//   parameterized model into the ModelFactory where it is discoverable
+//   by the rest of the library
+class ModelFormFactory
 {
 public:
-    static std::unique_ptr<ModelConfig> Create(const std::string& name, const SNR&);
-    static bool Register(const std::string& name, std::unique_ptr<ModelCreator>&& ctor);
-    static boost::optional<std::string> Resolve(const std::string& name);
-    static std::set<std::string> SupportedModels();
+    static bool LoadModel(const std::string& path);
+    static bool Register(const std::string& form, ModelFormCreator* ctor);
 
 private:
-    static std::map<std::string, std::unique_ptr<ModelCreator>>& CreatorTable();
+    static std::map<std::string, ModelFormCreator*>& CreatorTable();
 };
 
-// The concrete form of ModelCreator, which registers a compiled-in
-//   model with the ModelFactory and implements the aforementioned
-//   Create method for instantiating a concrete model given an SNR
+// The concrete version of the ModelFormCreator, which registers
+//   a model form with the ModelFormFactory, and implements the
+//   aforementioned abstract method LoadParams to yield a ModelCreator
+//   given a property_tree full of parameters
 template <typename T>
-class ModelCreatorImpl : public ModelCreator
+class ModelFormCreatorImpl : public ModelFormCreator
 {
 public:
-    ModelCreatorImpl<T>() {}
-    ModelCreatorImpl<T>(const std::set<std::string>& names)
+    ModelFormCreatorImpl<T>(const std::string& form)
     {
-        for (const std::string& name : names)
-            if (!ModelFactory::Register(name + "::Compiled",
-                                        std::unique_ptr<ModelCreator>(new ModelCreatorImpl<T>())))
-                throw DuplicateModel(name);
+        if (!ModelFormFactory::Register(form, this))
+            throw std::runtime_error("duplicate model form inserted into form factory!");
     }
 
-    virtual std::unique_ptr<ModelConfig> Create(const SNR& snr) const
+    virtual std::unique_ptr<ModelCreator> LoadParams(const boost::property_tree::ptree& pt) const
     {
-        return std::unique_ptr<ModelConfig>(new T(snr));
+        return std::unique_ptr<ModelCreator>(new T(pt));
     }
 };
 
-// An accessor to a global parameter for overriding the model
-boost::optional<std::string>& ModelOverride();
+#define REGISTER_MODELFORM(cls) \
+private:                        \
+    static const ModelFormCreatorImpl<cls> creator_
 
-#define REGISTER_MODEL(cls) \
-private:                    \
-    static const ModelCreatorImpl<cls> creator_
-
-#define REGISTER_MODEL_IMPL(cls) const ModelCreatorImpl<cls> cls::creator_(cls::Names())
+#define REGISTER_MODELFORM_IMPL(cls) const ModelFormCreatorImpl<cls> cls::creator_(cls::Name())
 
 }  // namespace Consensus
 }  // namespace PacBio

@@ -41,7 +41,6 @@
 #include <iostream>
 #include <memory>
 #include <numeric>
-#include <set>
 
 #include <pacbio/consensus/Evaluator.h>
 #include <pacbio/consensus/Exceptions.h>
@@ -64,8 +63,6 @@ inline std::ostream& operator<<(std::ostream& os, State result)
     os << StateName[static_cast<size_t>(result)];
     return os;
 }
-
-std::set<std::string> SupportedChemistries();
 
 class AbstractIntegrator
 {

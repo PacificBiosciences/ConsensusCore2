@@ -1,4 +1,4 @@
-// Copyright (c) 2011-2016, Pacific Biosciences of California, Inc.
+// Copyright (c) 2016, Pacific Biosciences of California, Inc.
 //
 // All rights reserved.
 //
@@ -33,58 +33,66 @@
 // OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 // SUCH DAMAGE.
 
-#pragma once
+// Author: Lance Hepler
 
-#include <stdexcept>
+#include <map>
 #include <string>
+#include <utility>
 
-#include <pacbio/consensus/State.h>
+#include <boost/property_tree/json_parser.hpp>
+#include <boost/property_tree/ptree.hpp>
+
+#include <pacbio/consensus/Exceptions.h>
+
+#include "ModelFactory.h"
+#include "ModelFormFactory.h"
 
 namespace PacBio {
 namespace Consensus {
-
-class StateError : public std::runtime_error
+std::map<std::string, ModelFormCreator*>& ModelFormFactory::CreatorTable()
 {
-public:
-    StateError(State state, const std::string& msg) : std::runtime_error(msg), state_(state) {}
-    State WhatState() const { return state_; }
-    virtual const char* what() const noexcept { return std::runtime_error::what(); }
-private:
-    State state_;
-};
+    static std::map<std::string, ModelFormCreator*> tbl;
+    return tbl;
+}
 
-class TemplateTooSmall : public StateError
+bool ModelFormFactory::LoadModel(const std::string& path)
 {
-public:
-    TemplateTooSmall() : StateError(State::TEMPLATE_TOO_SMALL, "Template too short!") {}
-};
+    using boost::property_tree::ptree;
+    using boost::property_tree::read_json;
 
-class AlphaBetaMismatch : public StateError
-{
-public:
-    AlphaBetaMismatch() : StateError(State::ALPHA_BETA_MISMATCH, "Alpha/beta mismatch!") {}
-};
+    ptree pt;
 
-class ChemistryNotFound : public std::runtime_error
-{
-public:
-    ChemistryNotFound(const std::string& name)
-        : std::runtime_error(std::string("chemistry not found: '") + name + "'")
-    {
+    try {
+        read_json(path, pt);
+        // verify we're looking at consensus model parameters
+        std::string version = pt.get<std::string>("ConsensusModelVersion");
+        if (version != "3.0.0") return false;
+    } catch (boost::property_tree::ptree_error) {
+        return false;
     }
-};
 
-class DuplicateModel : public std::runtime_error
+    const std::string chemistry = pt.get<std::string>("ChemistryName");
+    const std::string form = pt.get<std::string>("ModelForm");
+
+    const auto tbl = CreatorTable();
+    const auto it = tbl.find(form);
+
+    if (it == tbl.end()) return false;
+
+    const std::string name = chemistry + "::" + form + "::" + "FromFile";
+
+    try {
+        return ModelFactory::Register(name, it->second->LoadParams(pt));
+    } catch (DuplicateModel& e) {
+        return false;
+    } catch (MalformedModelFile& e) {
+        return false;
+    }
+}
+
+bool ModelFormFactory::Register(const std::string& form, ModelFormCreator* ctor)
 {
-public:
-    DuplicateModel(const std::string& name) : std::runtime_error("duplicate model: '" + name + "'") {}
-};
-
-class MalformedModelFile : public std::runtime_error
-{
-public:
-    MalformedModelFile() : std::runtime_error("malformed model!") {}
-};
-
-}  // namespace Consensus
-}  // namespace PacBio
+    return CreatorTable().insert(std::make_pair(form, ctor)).second;
+}
+}
+}
