@@ -87,6 +87,24 @@ TEST(PairwiseAlignmentTests, GlobalAlignmentTests)
     EXPECT_EQ("GATTACA", a->Target());
     EXPECT_EQ("--TT---", a->Query());
     EXPECT_FLOAT_EQ(2. / 7, a->Accuracy());
+}
+
+TEST(PairwiseAlignmentTests, LeftAlignmentTest)
+{
+    // These are both respectable left alignments, neither is produced.
+    // CGCGGTGAGCGCCTGACCCCGAGGGGGCCCGGGGCCGCGTCCCTGGGCCCTCCCCACCCTT
+    // CGCGGTGAGCGCCTGACCCCGA--GGGCC---------------GGGCCCTCCCCACCCTT
+    // CGCGGTGAGCGCCTGACCCCGAGGG--CC---------------GGGCCCTCCCCACCCTT
+    
+    std::string ref  = "CGCGGTGAGCGCCTGACCCCGAGGGGGCCCGGGGCCGCGTCCCTGGGCCCTCCCCACCCTT";
+    std::string read = "CGCGGTGAGCGCCTGACCCCGAGGGCCGGGCCCTCCCCACCCTT";
+    std::string expected = "CGCGGTGAGCGCCTGACCCCGAGGG--CC---------------GGGCCCTCCCCACCCTT";
+    PairwiseAlignment* a = AlignAffine(ref, read);
+    std::cout<< a->Target() << std::endl;
+    std::cout<< a->Query() << std::endl;
+    std::cout<< a->Transcript() << std::endl;
+    ASSERT_EQ(expected, a->Query());
+    
     delete a;
 }
 
